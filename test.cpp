@@ -27,8 +27,8 @@ void check_trace_exception() {
     };
     {
         auto root = A();
-        auto level1 = trace_exception<B>(root);
-        auto level2 = trace_exception<A>(level1);
+        auto level1 = trace_exception<B, A>(root);
+        auto level2 = trace_exception<A, trace_exception<B, A>>(level1);
         assert(std::string(level2.what()) == "A\nB\nA");
     }
     {
@@ -79,7 +79,7 @@ void send_email(std::string const &dst, std::string const &subject, std::string 
     }
 }
 
-void example() {
+void run() {
     try {
         send_email("foo@bar.baz", "Hello there", "How are you doing bro?");
     } catch (std::exception const &e) {
@@ -93,9 +93,49 @@ void example() {
 }
 }
 
+namespace typed_example {
+struct file_not_found : public std::runtime_error {
+    file_not_found(std::string const &f)
+        : std::runtime_error("File not nound -- " + f),
+          filename(f) {}
+    const std::string filename;
+};
+
+struct db_error : public std::runtime_error {
+    db_error(std::string const &db)
+        : std::runtime_error("DB error -- " + db),
+          db_name(db) {}
+    const std::string db_name;
+};
+
+using db_error_file_not_found = trace_exception<db_error, file_not_found>;
+
+void open_file(std::string const &filename) {
+    throw contextual_exception<file_not_found>(__FILE__, __LINE__, filename);
+}
+
+void open_db(std::string const &db_name) {
+    try {
+        open_file(db_name + ".txt");
+    } catch (file_not_found const &e) {
+        throw contextual_track<db_error>(e, __FILE__, __LINE__, db_name);
+    }
+}
+
+void run() {
+    try {
+        open_db("pornhub");
+    } catch (db_error_file_not_found const &e) {
+        std::cout << "db (" << e.db_name<< ") cannot open file (" << e.prev.filename << "). Traceback:" << std::endl;
+        std::cout << e.what() << std::endl;
+    }
+}
+}
+
 int main() {
     check_contextual_exception();
     check_trace_exception();
-    example::example();
+    example::run();
+    typed_example::run();
     return 0;
 }

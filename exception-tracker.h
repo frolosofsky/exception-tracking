@@ -38,36 +38,40 @@ private:
 };
 
 // Tracks previously thrown exception.
-template<typename Base>
+template<typename Base, typename Prev>
 class trace_exception : public Base {
 public:
     trace_exception(trace_exception const &other)
         : Base(other),
-          cache(other.cache) {}
+          prev(other.prev),
+          error_str(other.error_str) {}
 
-    template<typename Prev, typename... Args>
+    template<typename... Args>
     trace_exception(Prev const &p, Args&&... args)
         : Base(std::forward<Args>(args)...),
-          cache(std::string(Base::what()) + "\n" + std::string(p.what())) {}
+          prev(p),
+          error_str(std::string(Base::what()) + "\n" + std::string(p.what())) {}
 
     char const *what() const noexcept override {
-        return cache.c_str();
+        return error_str.c_str();
     }
 
+    const Prev prev;
+
 private:
-    mutable std::string cache;
+    const std::string error_str;
 };
 
 template<typename Base, typename Prev, typename... Args>
-trace_exception<Base> track(Prev const &prev, Args&&... args) {
+trace_exception<Base, Prev> track(Prev const &prev, Args&&... args) {
     return {prev, std::forward<Args>(args)...};
 }
 
 template<typename Base, typename Prev, typename... Args>
-trace_exception<contextual_exception<Base>> contextual_track(
+contextual_exception<trace_exception<Base, Prev>> contextual_track(
     Prev const &prev, std::string const &file, uint32_t const line, Args&&... args) {
 
-    return {prev, file, line, std::forward<Args>(args)...};
+    return {file, line, prev, std::forward<Args>(args)...};
 }
 
 }
